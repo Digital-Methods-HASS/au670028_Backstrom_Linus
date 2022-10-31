@@ -1,0 +1,74 @@
+---
+title: '6:W43: Practicing functions with Gapminder'
+author: "Linus Backström (202004875)"
+date: "2022-10-31"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+library(gapminder)
+library(dplyr)
+```
+
+```{r}
+df <- as.data.frame(gapminder)
+head(gapminder)
+```
+
+### 1. Define a defensive function that calculates the Gross Domestic Product of a nation from the data available in the gapminder dataset. You can use the population and GDPpercapita columns for it. Using that function, calculate the GDP of Denmark in the following years: 1967, 1977, 1987, 1997, 2007, and 2017.
+
+
+```{r}
+# code based on https://swcarpentry.github.io/r-novice-gapminder/10-functions/index.html
+
+calcGDP <- function(df, country=NULL, year=NULL) { # must provide df; country&year optional, default to NULL
+  if(!is.null(country)) { # if country is provided, find values for that country (otherwise all countries in df)
+    df <- df[df$country %in% country, ]
+  }
+  if (!is.null(year)) { # if year is provided, find values for that year (otherwise all years in df)
+    df <- df[df$year %in% year,]
+  }
+  gdp <- df$pop * df$gdpPercap # simple GDP calculation
+
+  new <- cbind(df, gdpM=gdp/1000000) # create new column for the calculated GDP displayed in millions
+  return(new) # show the row(s) with calculated GDP
+
+}
+
+calcGDP(df, "Denmark", 1967)
+calcGDP(df, "Denmark", 1977)
+calcGDP(df, "Denmark", 1987)
+calcGDP(df, "Denmark", 1997)
+calcGDP(df, "Denmark", 2007)
+calcGDP(df, "Denmark", 2017)
+
+```
+
+### 2. Write a script that loops over each country in the gapminder dataset, tests whether the country starts with a ‘B’ , and prints out whether the life expectancy is smaller than 50, between 50 and 70, or greater than 70. (Hint: remember the grepl function, and review the Control Flow tutorial)
+
+```{r}
+# code based on https://swcarpentry.github.io/r-novice-gapminder/07-control-flow/index.html
+
+ lowerThreshold <- 50 # setting thresholds for lower and upper life expectancies
+ upperThreshold <- 70
+
+B_countries <- grep("^B", unique(df$country), value = TRUE) # creates vector of countries that start with a 'B'
+ 
+for (iCountry in B_countries) { # loop through each country found to start with a 'B'
+    tmp <- mean(df[df$country == iCountry, "lifeExp"])
+
+    if(tmp < lowerThreshold) { # print text depending on life exp. related to thresholds
+        cat("Average Life Expectancy in", iCountry, "is less than", lowerThreshold, "\n")
+    } else if(tmp > lowerThreshold && tmp < upperThreshold) {
+        cat("Average Life Expectancy in", iCountry, "is between", lowerThreshold, "and", upperThreshold, "\n")
+    } else {
+        cat("Average Life Expectancy in", iCountry, "is greater than", upperThreshold, "\n")
+    }
+    rm(tmp)
+}
+```
+
