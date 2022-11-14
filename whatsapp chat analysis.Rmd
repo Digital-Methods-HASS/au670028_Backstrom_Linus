@@ -1,0 +1,275 @@
+---
+title: "Text mining a WhatsApp chat"
+date: "14.11.2022"
+output:
+  html_document: default
+  pdf_document: default
+editor_options:
+  chunk_output_type: console
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE,
+                      warning = FALSE,
+                      message = FALSE)
+
+library(tidyverse)
+library(here)
+
+
+# WhatsApp library
+pacman::p_load(rwhatsapp)
+
+setwd("~/5. Semester/Cultural Data Science/W45/SentimentAnalysis/Homework")
+```
+
+## **Warning!** If common curse words offend you and you do not want to see them, do not proceed.
+
+### The following tutorial was used for this analysis: https://cran.r-project.org/web/packages/rwhatsapp/vignettes/Text_Analysis_using_WhatsApp_data.html
+
+### While I'm not directly using the provided repositories, I understood that Adéla approved this as an option when I asked about text mining a WhatsApp chat. 
+
+### I only realized just before handing it in, that while I got permission for the analysis, the full dataset is private enough that I don't want to make the whole thing public, so unfortunately you will not be able to run the code below. I suggest using the rendered markdown file. 
+
+### Feel free to use your own WhatsApp chats to run the code and visualizations though!
+
+```{r}
+chat <- rwa_read("C:/Users/linus/Documents/5. Semester/Cultural Data Science/W45/SentimentAnalysis/Homework/data/groupchat.txt") %>% 
+  filter(!is.na(author)) # remove messages without author just in case
+
+chat = chat[-1,] # removing first row
+
+# pseudoanonymizing authors
+chat$author <- sub("^H.*", "H", chat$author)
+chat$author <- sub("^S.*", "S", chat$author)
+chat$author <- sub("^C.*", "C", chat$author)
+chat$author <- sub("^Y.*", "Y", chat$author)
+chat$author <- sub("^J.*", "J", chat$author)
+chat$author <- sub("^G.*", "G", chat$author)
+chat$author <- sub("^A.*", "A", chat$author)
+chat$author <- sub("^D.*", "D", chat$author)
+chat$author <- sub("^E.*", "E", chat$author)
+chat$author <- sub("^P.*", "P", chat$author)
+chat$author <- sub("^M.*", "I", chat$author)
+chat$author <- sub("^I.*", "I", chat$author) #same author as above but another alias
+chat$author <- sub("^L.*", "L", chat$author)
+chat$author <- sub("^R.*", "R", chat$author)
+chat$author <- sub("^W.*", "W", chat$author)
+chat$author <- sub(".*[307].*", "O", chat$author)
+
+# making sure all names are pseudoanonymized
+unique(chat$author)
+```
+
+```{r}
+df <-subset(chat, author!="G") # excluding certain author (let's just say they're an outlier)
+```
+
+```{r}
+# Visualizing the total amount of messages per day
+
+library(scales)
+library("ggplot2"); theme_set(theme_minimal())
+library("lubridate")
+df %>%
+  mutate(day = date(time)) %>%
+  count(day) %>%
+  ggplot(aes(x = day, y = n)) +
+  geom_bar(stat = "identity") +
+  ylab("") + xlab("") +
+  scale_x_date(date_breaks = "1 month", date_labels =  "%Y-%m") +
+  theme(axis.text.x=element_text(angle=90, hjust=1))+
+  ylim(0, 410)+
+  ggtitle("Daily volume (total messages per day)")
+```
+
+```{r}
+# Vizualizing how many messages each author sent in total
+
+df %>%
+  mutate(day = date(time)) %>%
+  count(author) %>%
+  ggplot(aes(x = reorder(author, n), y = n)) +
+  geom_bar(stat = "identity") +
+  ylab("") + xlab("") +
+  coord_flip() +
+  ggtitle("Number of messages per author\n")
+```
+
+```{r}
+# removing authors with too few messages (it affects some of the following analyses negatively)
+
+df2 <-subset(df, author!="O" & author!="Y" & author!="R") 
+```
+
+```{r}
+# Creating a few variations of word lists to ignore
+
+library(tidytext)
+pacman::p_load("stopwords") # for removing non-meaningful words; I had to add words with apostrophe's separately, because in the stopwords list they use this: ', but in the data it's a ’
+sw_to_remove <- c(stop_words$word, "image", "omitted", "im", "https", "i’m", "you’re", "ive", "bc", "he’s", "she’s",
+                  "it’s", "don’t", "that’s", "yeah", "yea", "yep", "dont", "ja", "ei", "se", "tho", "didn’t", "can’t",
+               "i’ll", "i’ve", "gonna", "wanna", "they’re", "they’ve", "doesn’t", "we’re", "haven’t", "won’t", "there’s")
+
+sw_no_curse <- c(stop_words$word, "image", "omitted", "im", "https", "i’m", "you’re", "ive", "bc", "he’s", "she’s",
+               "it’s", "don’t", "that’s", "yeah", "yea", "yep", "dont", "ja", "ei", "se", "tho", "didn’t", "can’t",
+               "i’ll", "i’ve", "gonna", "wanna",
+               "shit", "fuck", "fucking", "fuckin", "vittu", "pillu") # also removing curse words
+
+sw_imgomit <- c("image", "omitted") # media is replaced with "image omitted", so I'm removing those as well
+```
+
+```{r}
+# Visualizing the most frequent words (including stop words at first for reference)
+
+df2 %>%
+  unnest_tokens(input = text,
+                output = word) %>%
+  filter(!word %in% sw_imgomit) %>%
+  count(author, word, sort = TRUE) %>%
+  group_by(author) %>%
+  top_n(n = 5, n) %>%
+  ggplot(aes(x = reorder_within(word, n, author), y = n, fill = author)) +
+  geom_col(show.legend = FALSE) +
+  ylab("") +
+  xlab("") +
+  coord_flip() +
+  facet_wrap(~author, ncol = 4, scales = "free_y") +
+  scale_x_reordered() +
+  ggtitle("Most frequent words\n")
+```
+
+## Ok that was boring. Let's remove those pesky stopwords now!
+
+```{r}
+# Visualizing the most frequent words (now removing stopwords)
+
+df2 %>%
+  unnest_tokens(input = text,
+                output = word) %>%
+  filter(!word %in% sw_to_remove) %>%
+  count(author, word, sort = TRUE) %>%
+  group_by(author) %>%
+  top_n(n = 5, n) %>%
+  ggplot(aes(x = reorder_within(word, n, author), y = n, fill = author)) +
+  geom_col(show.legend = FALSE) +
+  ylab("") +
+  xlab("") +
+  coord_flip() +
+  facet_wrap(~author, ncol = 4, scales = "free_y") +
+  scale_x_reordered() +
+  ggtitle("Most frequent words (stopwords removed)\n")
+```
+
+## That's much better, but let's try once more with curse words removed as well.
+
+```{r}
+# Visualizing the most frequent words (stopwords and curses removed)
+
+df2 %>%
+  unnest_tokens(input = text,
+                output = word) %>%
+  filter(!word %in% sw_no_curse) %>%
+  count(author, word, sort = TRUE) %>%
+  group_by(author) %>%
+  top_n(n = 5, n) %>%
+  ggplot(aes(x = reorder_within(word, n, author), y = n, fill = author)) +
+  geom_col(show.legend = FALSE) +
+  ylab("") +
+  xlab("") +
+  coord_flip() +
+  facet_wrap(~author, ncol = 4, scales = "free_y") +
+  scale_x_reordered() +
+  ggtitle("Most frequent words (stopwords and curses removed)\n")
+```
+
+```{r}
+# Visualizing the most frequent words using tf-idf (see below)
+
+# term frequency–inverse document frequency (tf–idf). "Basically, what the measure does, in this case, is to find words that are common within the messages of one author but uncommon in the rest of the messages".
+
+df2 %>%
+  unnest_tokens(input = text,
+                output = word) %>%
+  select(word, author) %>%
+  filter(!word %in% sw_to_remove) %>%
+  count(author, word, sort = TRUE) %>%
+  bind_tf_idf(term = word, document = author, n = n) %>%
+  filter(n > 10) %>%
+  group_by(author) %>%
+  top_n(n = 6, tf_idf) %>%
+  ggplot(aes(x = reorder_within(word, n, author), y = n, fill = author)) +
+  geom_col(show.legend = FALSE) +
+  ylab("") +
+  xlab("") +
+  coord_flip() +
+  facet_wrap(~author, ncol = 4, scales = "free_y") +
+  scale_x_reordered() +
+  ggtitle("Relative most frequent words\n")
+```
+
+```{r}
+# Visualizing amount of unique words per author
+
+df2 %>%
+  unnest_tokens(input = text,
+                output = word) %>%
+  filter(!word %in% sw_to_remove) %>%
+  group_by(author) %>%
+  summarise(lex_diversity = n_distinct(word)) %>%
+  arrange(desc(lex_diversity)) %>%
+  ggplot(aes(x = reorder(author, lex_diversity),
+                          y = lex_diversity,
+                          fill = author)) +
+  geom_col(show.legend = FALSE) +
+  scale_y_continuous(expand = (mult = c(0, 0, 0, 500))) +
+  geom_text(aes(label = scales::comma(lex_diversity)), hjust = 1.05) +
+  ylab("unique words") +
+  xlab("") +
+  ggtitle("Lexical Diversity (unique words)\n") +
+  coord_flip()
+```
+
+## Let's look at person E who had the most diverse vocabulary, and see what are their most used unique words.
+
+```{r}
+o_words <- df2 %>%
+  unnest_tokens(input = text,
+                output = word) %>%
+  filter(author != "E") %>% 
+  count(word, sort = TRUE) 
+
+df2 %>%
+  unnest_tokens(input = text,
+                output = word) %>%
+  filter(author == "E") %>% 
+  count(word, sort = TRUE) %>% 
+  filter(!word %in% o_words$word) %>% # only select words nobody else uses
+  top_n(n = 6, n) %>%
+  ggplot(aes(x = reorder(word, n), y = n)) +
+  geom_col(show.legend = FALSE) +
+  ylab("") + xlab("") +
+  coord_flip() +
+  ggtitle("Unique words of E\n")
+```
+
+## Shweet! Let's finish with some emojis.
+
+```{r}
+# Visualizing most frequent emojis per author
+
+library("tidyr")
+df2 %>%
+  unnest(emoji) %>%
+  count(author, emoji, sort = TRUE) %>%
+  group_by(author) %>%
+  top_n(n = 6, n) %>%
+  ggplot(aes(x = reorder(emoji, n), y = n, fill = author)) +
+  geom_col(show.legend = FALSE) +
+  ylab("") +
+  xlab("") +
+  coord_flip() +
+  facet_wrap(~author, ncol = 3, scales = "free_y")  +
+  ggtitle("Most often used emojis")
+```
+
